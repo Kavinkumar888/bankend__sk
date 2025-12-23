@@ -8,24 +8,20 @@ dotenv.config();
 
 const app = express();
 
-/* Middleware */
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
-/* MongoDB */
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ MongoDB Connected"))
   .catch((err) => console.error("❌ MongoDB Error", err));
 
-/* Routes */
 app.use("/api/payment", paymentRoutes);
 
 app.get("/", (req, res) => {
-  res.send("Cashfree + MongoDB Backend Running ✅");
+  res.send("Cashfree Sandbox Backend Running ✅");
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`🚀 Server running on port ${PORT}`)
+app.listen(process.env.PORT || 5000, () =>
+  console.log("🚀 Server running")
 );

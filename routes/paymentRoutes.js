@@ -8,24 +8,20 @@ const router = express.Router();
 router.post("/create-order", async (req, res) => {
   try {
     const { amount, customer } = req.body;
-
     const orderId = "ORDER_" + Date.now();
 
-    /* Create Cashfree order */
     const response = await axios.post(
-      "https://api.cashfree.com/pg/orders",
+      `${process.env.CASHFREE_BASE_URL}/orders`,
       {
         order_id: orderId,
         order_amount: amount,
         order_currency: "INR",
-
         customer_details: {
           customer_id: "CUST_" + Date.now(),
           customer_name: customer.name,
           customer_phone: customer.phone,
           customer_email: customer.email,
         },
-
         order_meta: {
           return_url:
             "http://localhost:5173/payment-success?order_id={order_id}",
@@ -41,12 +37,11 @@ router.post("/create-order", async (req, res) => {
       }
     );
 
-    /* SAVE TO MONGODB (PENDING) */
     await Order.create({
       orderId,
       amount,
-      paymentSessionId: response.data.payment_session_id,
       customer,
+      paymentSessionId: response.data.payment_session_id,
       status: "PENDING",
     });
 
@@ -54,9 +49,16 @@ router.post("/create-order", async (req, res) => {
       payment_session_id: response.data.payment_session_id,
     });
   } catch (err) {
-    console.error("🔥 Payment Error:", err.response?.data || err.message);
+    console.error("❌ Cashfree Error:", err.response?.data || err.message);
     res.status(500).json({ error: "Order creation failed" });
   }
+});
+
+/* MARK SUCCESS */
+router.post("/mark-success", async (req, res) => {
+  const { orderId } = req.body;
+  await Order.findOneAndUpdate({ orderId }, { status: "SUCCESS" });
+  res.json({ message: "Order updated" });
 });
 
 export default router;
