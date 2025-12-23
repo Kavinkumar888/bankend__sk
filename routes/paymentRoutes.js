@@ -1,5 +1,6 @@
 import express from "express";
 import axios from "axios";
+import crypto from "crypto";
 import Order from "../models/Order.js";
 
 const router = express.Router();
@@ -8,10 +9,11 @@ const router = express.Router();
 router.post("/create-order", async (req, res) => {
   try {
     const { amount, customer } = req.body;
-    const orderId = "ORDER_" + Date.now();
+
+    const orderId = "ORDER_" + crypto.randomUUID();
 
     const response = await axios.post(
-      `${process.env.CASHFREE_BASE_URL}/orders`,
+      "https://api.cashfree.com/pg/orders",
       {
         order_id: orderId,
         order_amount: amount,
@@ -24,7 +26,7 @@ router.post("/create-order", async (req, res) => {
         },
         order_meta: {
           return_url:
-            "http://localhost:5173/payment-success?order_id={order_id}",
+            "https://cktextiles.shop/payment-success?order_id={order_id}",
         },
       },
       {
@@ -42,7 +44,6 @@ router.post("/create-order", async (req, res) => {
       amount,
       customer,
       paymentSessionId: response.data.payment_session_id,
-      status: "PENDING",
     });
 
     res.json({
