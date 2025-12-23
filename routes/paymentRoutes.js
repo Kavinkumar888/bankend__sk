@@ -1,25 +1,34 @@
 import express from "express";
 import axios from "axios";
-import crypto from "crypto";
+import Order from "../models/Order.js";
 
 const router = express.Router();
 
-/* ---------------- CREATE ORDER ---------------- */
+/* CREATE ORDER */
 router.post("/create-order", async (req, res) => {
-  const { amount, customer } = req.body;
-
   try {
+    const { amount, customer } = req.body;
+
+    const orderId = "ORDER_" + Date.now();
+
+    /* Create Cashfree order */
     const response = await axios.post(
-      `${process.env.CASHFREE_BASE_URL}/pg/orders`,
+      "https://api.cashfree.com/pg/orders",
       {
-        order_id: "ORDER_" + Date.now(),
-        order_amount: Math.round(Number(amount)),
+        order_id: orderId,
+        order_amount: amount,
         order_currency: "INR",
+
         customer_details: {
           customer_id: "CUST_" + Date.now(),
           customer_name: customer.name,
           customer_phone: customer.phone,
-          customer_email: customer.email || "test@gmail.com",
+          customer_email: customer.email,
+        },
+
+        order_meta: {
+          return_url:
+            "http://localhost:5173/payment-success?order_id={order_id}",
         },
       },
       {
@@ -32,68 +41,22 @@ router.post("/create-order", async (req, res) => {
       }
     );
 
-    res.json(response.data);
+    /* SAVE TO MONGODB (PENDING) */
+    await Order.create({
+      orderId,
+      amount,
+      paymentSessionId: response.data.payment_session_id,
+      customer,
+      status: "PENDING",
+    });
+
+    res.json({
+      payment_session_id: response.data.payment_session_id,
+    });
   } catch (err) {
-    console.error("CREATE ORDER ERROR:", err.response?.data || err.message);
+    console.error("🔥 Payment Error:", err.response?.data || err.message);
     res.status(500).json({ error: "Order creation failed" });
   }
 });
-
-/* ---------------- WEBHOOK VERIFICATION ---------------- */
-router.post("/webhook", express.json({ verify: rawBodySaver }), (req, res) => {
-  try {
-    const signature = req.headers["x-webhook-signature"];
-    const timestamp = req.headers["x-webhook-timestamp"];
-
-    const rawBody = req.rawBody;
-    const secret = process.env.CASHFREE_WEBHOOK_SECRET;
-
-    // Create expected signature
-    const payload = timestamp + rawBody;
-    const expectedSignature = crypto
-      .createHmac("sha256", secret)
-      .update(payload)
-      .digest("base64");
-
-    if (expectedSignature !== signature) {
-      console.error("❌ Invalid Webhook Signature");
-      return res.status(400).send("Invalid signature");
-    }
-
-    // ✅ VERIFIED WEBHOOK
-    const event = req.body;
-
-    console.log("✅ WEBHOOK VERIFIED");
-    console.log("EVENT:", event.type);
-    console.log("ORDER:", event.data.order.order_id);
-    console.log("STATUS:", event.data.payment.payment_status);
-
-    // 🔥 IMPORTANT DATA
-    const orderId = event.data.order.order_id;
-    const paymentStatus = event.data.payment.payment_status;
-
-    /*
-      payment_status values:
-      - SUCCESS
-      - FAILED
-      - PENDING
-    */
-
-    // TODO:
-    // 1️⃣ Save order in DB
-    // 2️⃣ Update order status
-    // 3️⃣ Send email / invoice
-
-    res.status(200).send("Webhook processed");
-  } catch (err) {
-    console.error("WEBHOOK ERROR:", err.message);
-    res.status(500).send("Webhook error");
-  }
-});
-
-/* -------- RAW BODY HELPER (IMPORTANT) -------- */
-function rawBodySaver(req, res, buf) {
-  req.rawBody = buf.toString();
-}
 
 export default router;
